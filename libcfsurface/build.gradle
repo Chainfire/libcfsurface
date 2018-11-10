@@ -1,0 +1,32 @@
+apply plugin: 'com.android.library'
+apply plugin: 'com.github.dcendents.android-maven'
+
+android {
+    signingConfigs {
+    }
+    compileSdkVersion 26
+    buildToolsVersion "28.0.3"
+    defaultConfig {
+        minSdkVersion 17
+        targetSdkVersion 26
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+}
+
+dependencies {
+    implementation('eu.chainfire:librootjava:1.0.0-SNAPSHOT') { changing = true }
+}
+
+task installMavenLocal(type: Upload) {
+    repositories.mavenInstaller {
+        configuration = configurations.default
+        pom.groupId = 'eu.chainfire'
+        pom.artifactId = 'libcfsurface'
+        pom.version = '1.0.0-SNAPSHOT'
+    }
+}
