@@ -43,16 +43,27 @@ public class GLTextManager extends GLTextRendererBase {
             }
             return mPicture;
         }
+
+        public void resize() {
+            if (mBitmap != null) {
+                mBitmaps.add(mBitmap);
+                mBitmap = null;
+            }
+            if (mPicture != null) {
+                mPicture.destroy();
+                mPicture = null;
+            }
+        }
     }
 
-    protected final int mLeft;
-    protected final int mTop;
-    protected final int mWidth;
-    protected final int mHeight;
-    protected final int mMaxHeight;
-    protected final int mLineCount;
-    protected final List<Line> mLines = new ArrayList<Line>();
-    protected final List<Bitmap> mBitmaps = new ArrayList<Bitmap>();
+    protected volatile int mLeft;
+    protected volatile int mTop;
+    protected volatile int mWidth;
+    protected volatile int mHeight;
+    protected volatile int mMaxHeight;
+    protected volatile int mLineCount;
+    protected volatile List<Line> mLines = new ArrayList<Line>();
+    protected volatile List<Bitmap> mBitmaps = new ArrayList<Bitmap>();
     protected volatile boolean mWordWrap = true;
 
     protected final ReentrantLock lock = new ReentrantLock(true);
@@ -63,12 +74,27 @@ public class GLTextManager extends GLTextRendererBase {
 
     public GLTextManager(GLTextureManager textureManager, GLHelper helper, int left, int top, int width, int height, int maxHeight, int lineHeight) {
         super(textureManager, helper, Typeface.MONOSPACE, lineHeight);
-        mLeft = left;
-        mTop = top;
-        mWidth = width;
-        mHeight = height;
-        mMaxHeight = maxHeight;
-        mLineCount = (int)Math.round(Math.ceil((float)mHeight / (float)mLineHeight));
+        resize(left, top, width, height, maxHeight, lineHeight);
+    }
+
+    public void resize(int left, int top, int width, int height, int maxHeight, int lineHeight) {
+        lock.lock();
+        try {
+            super.resize(lineHeight);
+            if (left >= 0) mLeft = left;
+            if (top >= 0) mTop = top;
+            if (width >= 0) mWidth = width;
+            if (height >= 0) mHeight = height;
+            if (maxHeight >= 0) mMaxHeight = maxHeight;
+            if (lineHeight >= 0) mLineCount = (int)Math.round(Math.ceil((float)mHeight / (float)mLineHeight));
+            for (Line line : mLines) {
+                line.resize();
+            }
+            for (Bitmap bitmap : mBitmaps) bitmap.recycle();
+            mBitmaps.clear();
+        } finally {
+            lock.unlock();
+        }
     }
 
     public ReentrantLock getLock() {

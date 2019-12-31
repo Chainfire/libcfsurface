@@ -3,15 +3,31 @@ package eu.chainfire.libcfsurface.gl;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
 
+import eu.chainfire.librootjava.Logger;
+
 public class GLHelper {
-    private final int mWidth;
-    private final int mHeight;
+    public static float[] getDefaultVMatrix() {
+        float[] vMatrix = new float[16];
+        Matrix.setLookAtM(vMatrix, 0,
+                0, 0, 1,
+                0, 0, -1,
+                0, 1, 0);
+        return vMatrix;
+    }
+
+    private volatile int mWidth;
+    private volatile int mHeight;
     private final float[] mVMatrix = new float[16];
     
     public GLHelper(int width, int height, float[] vMatrix) {
         mWidth = width;
         mHeight = height;
         setVMatrix(vMatrix);
+    }
+
+    public void resize(int width, int height) {
+        if (width >= 0) mWidth = width;
+        if (height >= 0) mHeight = height;
     }
     
     public void setVMatrix(float[] vMatrix) {

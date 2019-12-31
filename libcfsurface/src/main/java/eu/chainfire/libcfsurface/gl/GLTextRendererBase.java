@@ -8,27 +8,33 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 
 public class GLTextRendererBase implements GLObject {
-    public static enum Justification { LEFT, CENTER, RIGHT };
+    public enum Justification { LEFT, CENTER, RIGHT };
     public static final int WIDTH_AUTO = 0;
 
     protected final GLTextureManager mTextureManager;
     protected final GLHelper mHelper;
     protected final Paint mPaint;
-    protected final int mTextSize;
-    protected final int mLineHeight;
-    protected final int mVerticalPadding;
-    protected final int mHorizontalPadding;
+    protected final Typeface mTypeface;
+    protected volatile int mTextSize;
+    protected volatile int mLineHeight;
+    protected volatile int mVerticalPadding;
+    protected volatile int mHorizontalPadding;
 
     protected GLTextRendererBase(GLTextureManager textureManager, GLHelper helper, Typeface typeface, int lineHeight) {
         mTextureManager = textureManager;
         mHelper = helper;
-        mLineHeight = lineHeight;
+        mTypeface = typeface;
+        mPaint = new Paint();
+        resize(lineHeight);
+    }
+
+    public void resize(int lineHeight) {
+        if (lineHeight >= 0) mLineHeight = lineHeight;
         mTextSize = (int)Math.round(Math.ceil((float)mLineHeight / 1.2f));
         mVerticalPadding = (mLineHeight - mTextSize) / 2;
         mHorizontalPadding = mLineHeight / 4;
-        mPaint = new Paint();
         mPaint.setAntiAlias(true);
-        mPaint.setTypeface(typeface);
+        mPaint.setTypeface(mTypeface);
         mPaint.setTextSize(mTextSize);
         mPaint.setColor(Color.WHITE);
         mPaint.setShadowLayer(1.0f, 1.0f, 1.0f, Color.BLACK);
@@ -48,7 +54,7 @@ public class GLTextRendererBase implements GLObject {
         } else {
             bitmap = inBitmap;
             width = bitmap.getWidth();
-            bitmap.eraseColor(0x00000000);
+            bitmap.eraseColor(0x0000000);
         }
 
         int leftMargin = 0;
