@@ -64,7 +64,7 @@ I'm not going to provide proper example code. You can look at
 
 It's meant to run as a
 [libRootJava](https://github.com/Chainfire/librootjava) process' main
-loop. You run your own descendant of [SurfaceHost](src/main/java/eu/chainfire/libcfsurface/SurfaceHost.java),
+loop. You run your own descendant of [SurfaceHost](libcfsurface/src/main/java/eu/chainfire/libcfsurface/SurfaceHost.java),
 implementing the abstract methods, as well as exactly one of the
 `IGLRenderCallback`, `ICanvasRenderCallback`, `IHardwareCanvasRenderCallback`,
 or `ISurfaceRenderCallback` interfaces.
