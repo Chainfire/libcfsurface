@@ -2,7 +2,6 @@ package eu.chainfire.libcfsurface.gl;
 
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
-import android.opengl.GLES20;
 
 import java.util.ArrayList;
 import java.util.List;

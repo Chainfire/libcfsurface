@@ -4,11 +4,11 @@ import android.graphics.Bitmap;
 import android.opengl.GLES20;
 import android.opengl.GLUtils;
 
-import eu.chainfire.librootjava.Logger;
-import eu.chainfire.libcfsurface.BuildConfig;
-
 import java.util.ArrayList;
 import java.util.concurrent.locks.ReentrantLock;
+
+import eu.chainfire.libcfsurface.BuildConfig;
+import eu.chainfire.librootjava.Logger;
 
 public class GLTextureManager {
     private static final boolean logHandles = false;

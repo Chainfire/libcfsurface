@@ -3,8 +3,6 @@ package eu.chainfire.libcfsurface.gl;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
 
-import eu.chainfire.librootjava.Logger;
-
 public class GLHelper {
     public static float[] getDefaultVMatrix() {
         float[] vMatrix = new float[16];

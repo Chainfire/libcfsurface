@@ -18,12 +18,12 @@ package eu.chainfire.libcfsurface.gl;
 
 import android.opengl.GLES20;
 
-import eu.chainfire.librootjava.Logger;
-import eu.chainfire.libcfsurface.BuildConfig;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+
+import eu.chainfire.libcfsurface.BuildConfig;
+import eu.chainfire.librootjava.Logger;
 
 public class GLUtil {
     public static final int BYTES_PER_FLOAT = 4;
