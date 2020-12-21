@@ -114,7 +114,14 @@ public abstract class SurfaceHost {
             Method mGetDisplayConfigs = cSurfaceControl.getDeclaredMethod("getDisplayConfigs", IBinder.class);
             Object[] displayConfigs = (Object[])mGetDisplayConfigs.invoke(null, mBuiltInDisplay);
 
-            Class<?> cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$PhysicalDisplayInfo");
+            Class<?> cPhysicalDisplayInfo;
+            try {
+                // API 30-
+                cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$PhysicalDisplayInfo");
+            } catch (ClassNotFoundException e) {
+                // API 30+
+                cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayConfig");
+            }
             Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
             Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
             if ((displayConfigs == null) || (displayConfigs.length == 0)) {
@@ -125,6 +132,16 @@ public abstract class SurfaceHost {
             checkRotation();
 
             // Create SurfaceControl
+            if (mSurfaceControl == null) {
+                // API 30+
+                try {
+                    Constructor<?> ctorSurfaceControl = cSurfaceControl.getDeclaredConstructor(cSurfaceSession, String.class, int.class, int.class, int.class, int.class, cSurfaceControl, SparseIntArray.class, java.lang.ref.WeakReference.class, String.class);
+                    ctorSurfaceControl.setAccessible(true);
+                    SparseIntArray sia = new SparseIntArray(0);
+                    mSurfaceControl = ctorSurfaceControl.newInstance(mSurfaceSession, "CFSurface", mWidth, mHeight, getPixelFormat(), 0x00000004 /*SurfaceControl.HIDDEN*/, null, sia, null, "CFSurface");
+                } catch (NoSuchMethodException e) {
+                }
+            }
             if (mSurfaceControl == null) {
                 // API 29+
                 try {
