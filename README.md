@@ -60,7 +60,7 @@ upload this.
 ## How it works, the really short version
 
 I'm not going to provide proper example code. You can look at
-*LiveBoot*'s source (**TODO: link when released**) if so inclined.
+[*LiveBoot*'s](https://github.com/Chainfire/liveboot) source if so inclined.
 
 It's meant to run as a
 [libRootJava](https://github.com/Chainfire/librootjava) process' main
