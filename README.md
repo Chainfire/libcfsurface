@@ -1,5 +1,7 @@
 # libCFSurface
 
+[![](https://jitpack.io/v/eu.chainfire/libcfsurface.svg)](https://jitpack.io/#eu.chainfire/libcfsurface)
+
 Direct SurfaceFlinger access as root
 
 ## License
@@ -92,6 +94,21 @@ never get around to pushing it to GitHub.
 
 ## Gradle
 
+Root `build.gradle`:
+
 ```
-implementation 'eu.chainfire:libcfsurface:1.0.0'
+allprojects {
+    repositories {
+        ...
+        maven { url 'https://jitpack.io' }
+    }
+}
+```
+
+Module `build.gradle`:
+
+```
+dependencies {
+    implementation 'eu.chainfire:libcfsurface:1.0.1'
+}
 ```
