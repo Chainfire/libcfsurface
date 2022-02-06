@@ -65,11 +65,11 @@ public abstract class SurfaceHost {
     private Method mSurfaceControlHide = null;
     private Method mSurfaceControlSetSize = null;
     private Surface mSurface = null;
-    Method mSurfaceControlGetGlobalTransaction = null;
-    Method mTransactionShow;
-    Method mTransactionHide;
-    Method mTransactionSetLayer;
-    Method mTransactionSetBufferSize;
+    private Method mSurfaceControlGetGlobalTransaction = null;
+    private Method mTransactionShow;
+    private Method mTransactionHide;
+    private Method mTransactionSetLayer;
+    private Method mTransactionSetBufferSize;
 
     private final boolean checkRotation() {
         // This is fairly weird construct only because we need to handle the case of (for example)
