@@ -109,6 +109,6 @@ Module `build.gradle`:
 
 ```
 dependencies {
-    implementation 'eu.chainfire:libcfsurface:1.0.1'
+    implementation 'eu.chainfire:libcfsurface:1.1.0'
 }
 ```
