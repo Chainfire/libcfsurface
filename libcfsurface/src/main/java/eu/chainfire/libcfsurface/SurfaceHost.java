@@ -15,6 +15,7 @@
 
 package eu.chainfire.libcfsurface;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.PixelFormat;
@@ -64,6 +65,11 @@ public abstract class SurfaceHost {
     private Method mSurfaceControlHide = null;
     private Method mSurfaceControlSetSize = null;
     private Surface mSurface = null;
+    Method mSurfaceControlGetGlobalTransaction = null;
+    Method mTransactionShow;
+    Method mTransactionHide;
+    Method mTransactionSetLayer;
+    Method mTransactionSetBufferSize;
 
     private final boolean checkRotation() {
         // This is fairly weird construct only because we need to handle the case of (for example)
@@ -126,19 +132,44 @@ public abstract class SurfaceHost {
                 mBuiltInDisplay = (IBinder)mGetPhysicalDisplayToken.invoke(null, ids[0]);
             }
 
-            Method mGetDisplayConfigs = cSurfaceControl.getDeclaredMethod("getDisplayConfigs", IBinder.class);
-            Object[] displayConfigs = (Object[])mGetDisplayConfigs.invoke(null, mBuiltInDisplay);
-
-            Class<?> cPhysicalDisplayInfo;
-            try {
+            Method mGetDisplayConfigs;
+            Object[] displayConfigs;
+            if (Build.VERSION.SDK_INT <= 30) {
                 // API 30-
+                mGetDisplayConfigs = cSurfaceControl.getDeclaredMethod("getDisplayConfigs", IBinder.class);
+                displayConfigs = (Object[]) mGetDisplayConfigs.invoke(null, mBuiltInDisplay);
+            } else {
+                // API 31+
+                Method mGetDynamicDisplayInfo = cSurfaceControl.getDeclaredMethod("getDynamicDisplayInfo", IBinder.class);
+                Object dynamicDisplayInfo = mGetDynamicDisplayInfo.invoke(null, mBuiltInDisplay);
+                Class<?> cDynamicDisplayInfo = Class.forName("android.view.SurfaceControl$DynamicDisplayInfo");
+                @SuppressLint("BlockedPrivateApi") Field fSsupportedDisplayModes = cDynamicDisplayInfo.getDeclaredField("supportedDisplayModes");
+                displayConfigs = (Object[]) fSsupportedDisplayModes.get(dynamicDisplayInfo);
+            }
+
+            Class<?> cPhysicalDisplayInfo = null;
+            // API 29-
+            try {
                 cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$PhysicalDisplayInfo");
             } catch (ClassNotFoundException e) {
-                // API 30+
-                cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayConfig");
             }
-            Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
-            Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
+            // API 30
+            if (cPhysicalDisplayInfo == null) {
+                try {
+                    cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayConfig");
+                } catch (ClassNotFoundException e) {
+                }
+            }
+            // API 31+
+            if (cPhysicalDisplayInfo == null) {
+                try {
+                    cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayMode");
+                } catch (ClassNotFoundException e) {
+                }
+            }
+
+            @SuppressLint("BlockedPrivateApi") Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
+            @SuppressLint("BlockedPrivateApi") Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
             if ((displayConfigs == null) || (displayConfigs.length == 0)) {
                 throw new RuntimeException("CFSurface: could not determine screen dimensions");
             }
@@ -219,15 +250,29 @@ public abstract class SurfaceHost {
                 throw new RuntimeException("CFSurface: could not create SurfaceControl");
             }
 
+            Class<?> cTransaction = null;
+
             // Get SurfaceControl methods we need later
             mSurfaceControlOpenTransaction = cSurfaceControl.getDeclaredMethod("openTransaction");
             mSurfaceControlCloseTransaction = cSurfaceControl.getDeclaredMethod("closeTransaction");
-            mSurfaceControlSetLayer = cSurfaceControl.getDeclaredMethod("setLayer", int.class);
-            mSurfaceControlShow = cSurfaceControl.getDeclaredMethod("show");
-            mSurfaceControlHide = cSurfaceControl.getDeclaredMethod("hide");
+            if (Build.VERSION.SDK_INT <= 30) {
+                mSurfaceControlSetLayer = cSurfaceControl.getDeclaredMethod("setLayer", int.class);
+                mSurfaceControlShow = cSurfaceControl.getDeclaredMethod("show");
+                mSurfaceControlHide = cSurfaceControl.getDeclaredMethod("hide");
+            } else {
+                mSurfaceControlGetGlobalTransaction = cSurfaceControl.getDeclaredMethod("getGlobalTransaction");
+                cTransaction = Class.forName("android.view.SurfaceControl$Transaction");
+                mTransactionSetLayer = cTransaction.getDeclaredMethod("setLayer", cSurfaceControl, int.class);
+                mTransactionShow = cTransaction.getDeclaredMethod("show", cSurfaceControl);
+                mTransactionHide = cTransaction.getDeclaredMethod("hide", cSurfaceControl);
+            }
 
             try {
-                mSurfaceControlSetSize = cSurfaceControl.getDeclaredMethod("setSize", int.class, int.class);
+                if (Build.VERSION.SDK_INT <= 30) {
+                    mSurfaceControlSetSize = cSurfaceControl.getDeclaredMethod("setSize", int.class, int.class);
+                } else {
+                    mTransactionSetBufferSize = cTransaction.getDeclaredMethod("setBufferSize", cSurfaceControl, int.class, int.class);
+                }
             } catch (NoSuchMethodException e) {
                 //TODO QP1: this method is messing, check Q source when it becomes available on how to work around
                 Logger.e("QP1: Could not retrieve setSize method");
@@ -241,11 +286,32 @@ public abstract class SurfaceHost {
 
             // Set top z-index
             mSurfaceControlOpenTransaction.invoke(null);
-            mSurfaceControlSetLayer.invoke(mSurfaceControl, 0x7FFFFFFF);
+            if (mSurfaceControlGetGlobalTransaction != null) {
+                // API 31+
+                synchronized (cSurfaceControl) {
+                    mTransactionSetLayer.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mSurfaceControl, 0x7FFFFFFF);
+                }
+            } else {
+                // API 30-
+                mSurfaceControlSetLayer.invoke(mSurfaceControl, 0x7FFFFFFF);
+            }
             mSurfaceControlCloseTransaction.invoke(null);
+
+            if (mSurfaceControlGetGlobalTransaction != null) {
+                // API 31+
+                Class<?> cTypeface = Class.forName("android.graphics.Typeface");
+                @SuppressLint("BlockedPrivateApi") Method mGetDefault = cTypeface.getDeclaredMethod("getDefault");
+                mGetDefault.setAccessible(true);
+
+                if (mGetDefault.invoke(null) == null) {
+                    @SuppressLint("BlockedPrivateApi") Method mLoadPreinstalledSystemFontMap = cTypeface.getDeclaredMethod("loadPreinstalledSystemFontMap");
+                    mLoadPreinstalledSystemFontMap.invoke(null);
+                }
+            }
 
             return true;
         } catch (Exception e) {
+            e.printStackTrace();
             Logger.ex(e);
             throw new RuntimeException("CFSurface: unexpected exception during SurfaceControl creation");
         }
@@ -266,10 +332,22 @@ public abstract class SurfaceHost {
         if (mShow != mIsVisible) {
             try {
                 mSurfaceControlOpenTransaction.invoke(null);
-                if (mShow) {
-                    mSurfaceControlShow.invoke(mSurfaceControl);
+                if (mSurfaceControlGetGlobalTransaction != null) {
+                    // API 31+
+                    synchronized (cSurfaceControl) {
+                        if (mShow) {
+                            mTransactionShow.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mSurfaceControl);
+                        } else {
+                            mTransactionHide.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mSurfaceControl);
+                        }
+                    }
                 } else {
-                    mSurfaceControlHide.invoke(mSurfaceControl);
+                    // API 30-
+                    if (mShow) {
+                        mSurfaceControlShow.invoke(mSurfaceControl);
+                    } else {
+                        mSurfaceControlHide.invoke(mSurfaceControl);
+                    }
                 }
                 mSurfaceControlCloseTransaction.invoke(null);
             } catch (Exception e) {
@@ -282,11 +360,20 @@ public abstract class SurfaceHost {
     private final void updateSurfaceSize() {
         if (mSurface != null) { // we can be called during initSurface
             try {
-                if (mSurfaceControlSetSize == null) { //TODO QP1
+                if (mSurfaceControlSetSize == null && mTransactionSetBufferSize == null) { //TODO QP1
                     Logger.e("QP1: setSize == null");
                 } else {
+                    // Does this nested conditional check have to be nested in this way?
                     mSurfaceControlOpenTransaction.invoke(null);
-                    mSurfaceControlSetSize.invoke(mSurfaceControl, mWidth, mHeight);
+                    if (mSurfaceControlGetGlobalTransaction != null) {
+                        // API 31+
+                        synchronized (cSurfaceControl) {
+                            mTransactionSetBufferSize.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mWidth, mHeight);
+                        }
+                    } else {
+                        // API 30-
+                        mSurfaceControlSetSize.invoke(mSurfaceControl, mWidth, mHeight);
+                    }
                     mSurfaceControlCloseTransaction.invoke(null);
                 }
             } catch (Exception e) {
