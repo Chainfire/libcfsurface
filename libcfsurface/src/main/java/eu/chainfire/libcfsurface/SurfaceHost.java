@@ -66,10 +66,12 @@ public abstract class SurfaceHost {
     private Method mSurfaceControlSetSize = null;
     private Surface mSurface = null;
     private Method mSurfaceControlGetGlobalTransaction = null;
-    private Method mTransactionShow;
-    private Method mTransactionHide;
-    private Method mTransactionSetLayer;
-    private Method mTransactionSetBufferSize;
+    private Object mTransaction = null;
+    private Method mTransactionApply = null;
+    private Method mTransactionShow = null;
+    private Method mTransactionHide = null;
+    private Method mTransactionSetLayer = null;
+    private Method mTransactionSetBufferSize = null;
 
     private final boolean checkRotation() {
         // This is fairly weird construct only because we need to handle the case of (for example)
@@ -270,22 +272,23 @@ public abstract class SurfaceHost {
                 mSurfaceControlShow = cSurfaceControl.getDeclaredMethod("show");
                 mSurfaceControlHide = cSurfaceControl.getDeclaredMethod("hide");
             } else {
-                mSurfaceControlGetGlobalTransaction = cSurfaceControl.getDeclaredMethod("getGlobalTransaction");
                 cTransaction = Class.forName("android.view.SurfaceControl$Transaction");
+                try {
+                    mSurfaceControlGetGlobalTransaction = cSurfaceControl.getDeclaredMethod("getGlobalTransaction");
+                } catch (NoSuchMethodException e) {
+                    // API 34+ - anything using mTransaction is specific to A14 QPR2+, not base A14
+                    mTransaction = cTransaction.newInstance();
+                    mTransactionApply = cTransaction.getDeclaredMethod("apply");
+                }
                 mTransactionSetLayer = cTransaction.getDeclaredMethod("setLayer", cSurfaceControl, int.class);
                 mTransactionShow = cTransaction.getDeclaredMethod("show", cSurfaceControl);
                 mTransactionHide = cTransaction.getDeclaredMethod("hide", cSurfaceControl);
             }
 
-            try {
-                if (Build.VERSION.SDK_INT <= 30) {
-                    mSurfaceControlSetSize = cSurfaceControl.getDeclaredMethod("setSize", int.class, int.class);
-                } else {
-                    mTransactionSetBufferSize = cTransaction.getDeclaredMethod("setBufferSize", cSurfaceControl, int.class, int.class);
-                }
-            } catch (NoSuchMethodException e) {
-                //TODO QP1: this method is messing, check Q source when it becomes available on how to work around
-                Logger.e("QP1: Could not retrieve setSize method");
+            if (Build.VERSION.SDK_INT <= 30) {
+                mSurfaceControlSetSize = cSurfaceControl.getDeclaredMethod("setSize", int.class, int.class);
+            } else {
+                mTransactionSetBufferSize = cTransaction.getDeclaredMethod("setBufferSize", cSurfaceControl, int.class, int.class);
             }
 
             // Get hidden Surface constructor and copyFrom
@@ -296,7 +299,11 @@ public abstract class SurfaceHost {
 
             // Set top z-index
             mSurfaceControlOpenTransaction.invoke(null);
-            if (mSurfaceControlGetGlobalTransaction != null) {
+            if (mTransaction != null) {
+                // API 34+
+                mTransactionSetLayer.invoke(mTransaction, mSurfaceControl, 0x7FFFFFFF);
+                mTransactionApply.invoke(mTransaction);
+            } else if (mSurfaceControlGetGlobalTransaction != null) {
                 // API 31+
                 synchronized (cSurfaceControl) {
                     mTransactionSetLayer.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mSurfaceControl, 0x7FFFFFFF);
@@ -307,7 +314,7 @@ public abstract class SurfaceHost {
             }
             mSurfaceControlCloseTransaction.invoke(null);
 
-            if (mSurfaceControlGetGlobalTransaction != null) {
+            if (mSurfaceControlGetGlobalTransaction != null || mTransaction != null) {
                 // API 31+
                 Class<?> cTypeface = Class.forName("android.graphics.Typeface");
                 @SuppressLint("BlockedPrivateApi") Method mGetDefault = cTypeface.getDeclaredMethod("getDefault");
@@ -342,7 +349,17 @@ public abstract class SurfaceHost {
         if (mShow != mIsVisible) {
             try {
                 mSurfaceControlOpenTransaction.invoke(null);
-                if (mSurfaceControlGetGlobalTransaction != null) {
+                if (mTransaction != null) {
+                    // API 34+
+                    synchronized (cSurfaceControl) {
+                        if (mShow) {
+                            mTransactionShow.invoke(mTransaction, mSurfaceControl);
+                        } else {
+                            mTransactionHide.invoke(mTransaction, mSurfaceControl);
+                        }
+                        mTransactionApply.invoke(mTransaction);
+                    }
+                } else if (mSurfaceControlGetGlobalTransaction != null) {
                     // API 31+
                     synchronized (cSurfaceControl) {
                         if (mShow) {
@@ -370,22 +387,23 @@ public abstract class SurfaceHost {
     private final void updateSurfaceSize() {
         if (mSurface != null) { // we can be called during initSurface
             try {
-                if (mSurfaceControlSetSize == null && mTransactionSetBufferSize == null) { //TODO QP1
-                    Logger.e("QP1: setSize == null");
-                } else {
-                    // Does this nested conditional check have to be nested in this way?
-                    mSurfaceControlOpenTransaction.invoke(null);
-                    if (mSurfaceControlGetGlobalTransaction != null) {
-                        // API 31+
-                        synchronized (cSurfaceControl) {
-                            mTransactionSetBufferSize.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mWidth, mHeight);
-                        }
-                    } else {
-                        // API 30-
-                        mSurfaceControlSetSize.invoke(mSurfaceControl, mWidth, mHeight);
+                mSurfaceControlOpenTransaction.invoke(null);
+                if (mTransaction != null) {
+                    // API 34+
+                    synchronized (cSurfaceControl) {
+                        mTransactionSetBufferSize.invoke(mTransaction, mWidth, mHeight);
+                        mTransactionApply.invoke(mTransaction);
                     }
-                    mSurfaceControlCloseTransaction.invoke(null);
+                } else if (mSurfaceControlGetGlobalTransaction != null) {
+                    // API 31+
+                    synchronized (cSurfaceControl) {
+                        mTransactionSetBufferSize.invoke(mSurfaceControlGetGlobalTransaction.invoke(mSurfaceControl), mWidth, mHeight);
+                    }
+                } else {
+                    // API 30-
+                    mSurfaceControlSetSize.invoke(mSurfaceControl, mWidth, mHeight);
                 }
+                mSurfaceControlCloseTransaction.invoke(null);
             } catch (Exception e) {
                 Logger.ex(e);
             }
