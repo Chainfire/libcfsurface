@@ -125,11 +125,14 @@ public abstract class SurfaceHost {
             } catch (NoSuchMethodException e) {
             }
             if (mBuiltInDisplay == null) {
-                // API 29+
-                Method mGetPhysicalDisplayIds = cSurfaceControl.getDeclaredMethod("getPhysicalDisplayIds");
-                long[] ids = (long[])mGetPhysicalDisplayIds.invoke(null);
-                Method mGetPhysicalDisplayToken = cSurfaceControl.getDeclaredMethod("getPhysicalDisplayToken", long.class);
-                mBuiltInDisplay = (IBinder)mGetPhysicalDisplayToken.invoke(null, ids[0]);
+                // API 29-33
+                try {
+                    Method mGetPhysicalDisplayIds = cSurfaceControl.getDeclaredMethod("getPhysicalDisplayIds");
+                    long[] ids = (long[])mGetPhysicalDisplayIds.invoke(null);
+                    Method mGetPhysicalDisplayToken = cSurfaceControl.getDeclaredMethod("getPhysicalDisplayToken", long.class);
+                    mBuiltInDisplay = (IBinder)mGetPhysicalDisplayToken.invoke(null, ids[0]);
+                } catch (NoSuchMethodException e) {
+                }
             }
 
             Method mGetDisplayConfigs;
@@ -138,10 +141,17 @@ public abstract class SurfaceHost {
                 // API 30-
                 mGetDisplayConfigs = cSurfaceControl.getDeclaredMethod("getDisplayConfigs", IBinder.class);
                 displayConfigs = (Object[]) mGetDisplayConfigs.invoke(null, mBuiltInDisplay);
-            } else {
-                // API 31+
+            } else if (mBuiltInDisplay != null) {
+                // API 31-33
                 Method mGetDynamicDisplayInfo = cSurfaceControl.getDeclaredMethod("getDynamicDisplayInfo", IBinder.class);
                 Object dynamicDisplayInfo = mGetDynamicDisplayInfo.invoke(null, mBuiltInDisplay);
+                Class<?> cDynamicDisplayInfo = Class.forName("android.view.SurfaceControl$DynamicDisplayInfo");
+                @SuppressLint("BlockedPrivateApi") Field fSsupportedDisplayModes = cDynamicDisplayInfo.getDeclaredField("supportedDisplayModes");
+                displayConfigs = (Object[]) fSsupportedDisplayModes.get(dynamicDisplayInfo);
+            } else {
+                // API 34+
+                Method mGetDynamicDisplayInfo = cSurfaceControl.getDeclaredMethod("getDynamicDisplayInfo", long.class);
+                Object dynamicDisplayInfo = mGetDynamicDisplayInfo.invoke(null, 0);
                 Class<?> cDynamicDisplayInfo = Class.forName("android.view.SurfaceControl$DynamicDisplayInfo");
                 @SuppressLint("BlockedPrivateApi") Field fSsupportedDisplayModes = cDynamicDisplayInfo.getDeclaredField("supportedDisplayModes");
                 displayConfigs = (Object[]) fSsupportedDisplayModes.get(dynamicDisplayInfo);
