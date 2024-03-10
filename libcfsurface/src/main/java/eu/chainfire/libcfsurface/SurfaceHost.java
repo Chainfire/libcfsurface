@@ -19,6 +19,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.hardware.display.DisplayManager;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -79,6 +80,9 @@ public abstract class SurfaceHost {
         // easier to use WindowManager::getDefaultDisplay(), but that will bring down the process
         // in that specific case.
         try {
+            if (mDisplayManager == null) {
+                mDisplayManager = (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
+            }
             if (mDisplayManager != null) {
                 Display[] displays = mDisplayManager.getDisplays();
                 if ((displays != null) && (displays.length > 0)) {
@@ -95,6 +99,35 @@ public abstract class SurfaceHost {
                             return true;
                         }
                     }
+                }
+            }
+        } catch (Exception e) {
+            // there will be exceptions during boot-up while DisplayManager isn't ready yet
+        }
+        return false;
+    }
+
+    private final boolean checkDimensions() throws Exception {
+        // Fallback method to grab display size from the Display Manager, which will probably
+        // delay boot if it even works. But on some devices SurfaceFlinger can't access screen
+        // information due to SELinux policies
+        // This doesn't actually help during boot though, because by the time the DisplayManager
+        // gets registered by system_server we're up and booted
+        try {
+            if (mDisplayManager == null) {
+                mDisplayManager = (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
+            }
+            if (mDisplayManager != null) {
+                Display[] displays = mDisplayManager.getDisplays();
+                if ((displays != null) && (displays.length > 0)) {
+                    Display display = mDisplayManager.getDisplay(0);
+                    Class<?> cDisplayInfo = Class.forName("android.view.DisplayInfo");
+                    Method getDisplayInfo = Display.class.getDeclaredMethod("getDisplayInfo", cDisplayInfo);
+                    Object displayInfo = cDisplayInfo.newInstance();
+                    getDisplayInfo.invoke(display, displayInfo);
+                    mWidth = cDisplayInfo.getDeclaredField("logicalWidth").getInt(displayInfo);
+                    mHeight = cDisplayInfo.getDeclaredField("logicalHeight").getInt(displayInfo);
+                    checkRotation();
                 }
             }
         } catch (Exception e) {
@@ -138,7 +171,7 @@ public abstract class SurfaceHost {
             }
 
             Method mGetDisplayConfigs;
-            Object[] displayConfigs;
+            Object[] displayConfigs = null;
             if (Build.VERSION.SDK_INT <= 30) {
                 // API 30-
                 mGetDisplayConfigs = cSurfaceControl.getDeclaredMethod("getDisplayConfigs", IBinder.class);
@@ -154,40 +187,49 @@ public abstract class SurfaceHost {
                 // API 34+
                 Method mGetDynamicDisplayInfo = cSurfaceControl.getDeclaredMethod("getDynamicDisplayInfo", long.class);
                 Object dynamicDisplayInfo = mGetDynamicDisplayInfo.invoke(null, 0);
-                Class<?> cDynamicDisplayInfo = Class.forName("android.view.SurfaceControl$DynamicDisplayInfo");
-                @SuppressLint("BlockedPrivateApi") Field fSsupportedDisplayModes = cDynamicDisplayInfo.getDeclaredField("supportedDisplayModes");
-                displayConfigs = (Object[]) fSsupportedDisplayModes.get(dynamicDisplayInfo);
-            }
-
-            Class<?> cPhysicalDisplayInfo = null;
-            // API 29-
-            try {
-                cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$PhysicalDisplayInfo");
-            } catch (ClassNotFoundException e) {
-            }
-            // API 30
-            if (cPhysicalDisplayInfo == null) {
-                try {
-                    cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayConfig");
-                } catch (ClassNotFoundException e) {
-                }
-            }
-            // API 31+
-            if (cPhysicalDisplayInfo == null) {
-                try {
-                    cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayMode");
-                } catch (ClassNotFoundException e) {
+                if (dynamicDisplayInfo != null) {
+                    Class<?> cDynamicDisplayInfo = Class.forName("android.view.SurfaceControl$DynamicDisplayInfo");
+                    @SuppressLint("BlockedPrivateApi") Field fSsupportedDisplayModes = cDynamicDisplayInfo.getDeclaredField("supportedDisplayModes");
+                    displayConfigs = (Object[]) fSsupportedDisplayModes.get(dynamicDisplayInfo);
                 }
             }
 
-            @SuppressLint("BlockedPrivateApi") Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
-            @SuppressLint("BlockedPrivateApi") Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
-            if ((displayConfigs == null) || (displayConfigs.length == 0)) {
-                throw new RuntimeException("CFSurface: could not determine screen dimensions");
+            if (displayConfigs == null) {
+                checkDimensions();
+                if (mWidth <= 0 || mHeight <= 0) {
+                    throw new RuntimeException("CFSurface: could not determine screen dimensions (DisplayManager)");
+                }
+            } else if (mWidth <= 0 || mHeight <= 0) {
+                Class<?> cPhysicalDisplayInfo = null;
+                // API 29-
+                try {
+                    cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$PhysicalDisplayInfo");
+                } catch (ClassNotFoundException e) {
+                }
+                // API 30
+                if (cPhysicalDisplayInfo == null) {
+                    try {
+                        cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayConfig");
+                    } catch (ClassNotFoundException e) {
+                    }
+                }
+                // API 31+
+                if (cPhysicalDisplayInfo == null) {
+                    try {
+                        cPhysicalDisplayInfo = Class.forName("android.view.SurfaceControl$DisplayMode");
+                    } catch (ClassNotFoundException e) {
+                    }
+                }
+
+                @SuppressLint("BlockedPrivateApi") Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
+                @SuppressLint("BlockedPrivateApi") Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
+                if ((displayConfigs == null) || (displayConfigs.length == 0)) {
+                    throw new RuntimeException("CFSurface: could not determine screen dimensions (SurfaceControl)");
+                }
+                mWidth = fWidth.getInt(displayConfigs[0]);
+                mHeight = fHeight.getInt(displayConfigs[0]);
+                checkRotation();
             }
-            mWidth = fWidth.getInt(displayConfigs[0]);
-            mHeight = fHeight.getInt(displayConfigs[0]);
-            checkRotation();
 
             // Create SurfaceControl
             if (mSurfaceControl == null) {
