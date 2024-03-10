@@ -1,19 +1,30 @@
 apply plugin: 'com.android.library'
-apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'maven-publish'
 
 android {
     signingConfigs {
     }
-    compileSdkVersion 26
-    buildToolsVersion "28.0.3"
+    namespace = 'eu.chainfire.libcfsurface'
+    compileSdkVersion 34
+    buildToolsVersion '34.0.0'
     defaultConfig {
         minSdkVersion 21
         targetSdkVersion 26
+        versionName '1.1.4'
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
         }
     }
 }
@@ -22,89 +33,14 @@ dependencies {
     implementation 'eu.chainfire:librootjava:1.3.3'
 }
 
-task sourcesJar(type: Jar) {
-    classifier = 'sources'
-    from android.sourceSets.main.java.srcDirs
-}
-
-task javadoc(type: Javadoc) {
-    source = android.sourceSets.main.java.srcDirs
-    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-}
-
-task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
-    from javadoc.destinationDir
-}
-
-artifacts {
-    archives javadocJar
-    archives sourcesJar
-}
-
-ext {
-    libraryName = 'libCFSurface'
-    libraryDescription = 'Direct SurfaceFlinger access as root'
-
-    publishedGroupId = 'eu.chainfire'
-    artifact = 'libcfsurface'
-
-    siteUrl = 'https://github.com/Chainfire/libcfsurface'
-    gitUrl = 'https://github.com/Chainfire/libcfsurface.git'
-    issueTrackerUrl = 'https://github.com/Chainfire/libcfsurface/issues'
-
-    libraryVersion = '1.1.4'
-
-    developerId = 'Chainfire'
-    developerName = 'Jorrit Jongma'
-    developerEmail = 'chainfire@chainfire.eu'
-
-    licenseName = 'The Apache Software License, Version 2.0'
-    licenseUrl = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-    allLicenses = ["Apache-2.0"]
-}
-
-task installMavenLocal(type: Upload) {
-    repositories.mavenInstaller {
-        configuration = configurations['archives']
-        pom.project {
-            packaging 'aar'
-            groupId = publishedGroupId
-            artifactId = artifact
-            version = libraryVersion + '-SNAPSHOT'
-        }
-    }
-}
-
-version = libraryVersion
-group = publishedGroupId
-
-install {
-    repositories.mavenInstaller {
-        pom.project {
-            packaging 'aar'
-            groupId = publishedGroupId
-            artifactId = artifact
-            name libraryName
-            version = libraryVersion
-            url siteUrl
-            licenses {
-                license {
-                    name licenseName
-                    url licenseUrl
-                }
-            }
-            developers {
-                developer {
-                    id developerId
-                    name developerName
-                    email developerEmail
-                }
-            }
-            scm {
-                connection gitUrl
-                developerConnection gitUrl
-                url gitUrl
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'eu.chainfire'
+                artifactId = 'libcfsurface'
+                version = android.defaultConfig.versionName
             }
         }
     }
