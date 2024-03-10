@@ -50,6 +50,8 @@ public abstract class SurfaceHost {
     private volatile boolean mIsVisible = false;
     private volatile int mWidth = 0;
     private volatile int mHeight = 0;
+    protected volatile int fallbackWidth = 0;
+    protected volatile int fallbackHeight = 0;
     private volatile long mLastFrame = 0;
     private volatile String mAPK = null;
     private volatile Context mContext = null;
@@ -197,7 +199,12 @@ public abstract class SurfaceHost {
             if (displayConfigs == null) {
                 checkDimensions();
                 if (mWidth <= 0 || mHeight <= 0) {
-                    throw new RuntimeException("CFSurface: could not determine screen dimensions (DisplayManager)");
+                    if (fallbackWidth > 0 && fallbackHeight > 0) {
+                        mWidth = fallbackWidth;
+                        mHeight = fallbackHeight;
+                    } else {
+                        throw new RuntimeException("CFSurface: could not determine screen dimensions (DisplayManager)");
+                    }
                 }
             } else if (mWidth <= 0 || mHeight <= 0) {
                 Class<?> cPhysicalDisplayInfo = null;
@@ -224,10 +231,16 @@ public abstract class SurfaceHost {
                 @SuppressLint("BlockedPrivateApi") Field fWidth = cPhysicalDisplayInfo.getDeclaredField("width");
                 @SuppressLint("BlockedPrivateApi") Field fHeight = cPhysicalDisplayInfo.getDeclaredField("height");
                 if ((displayConfigs == null) || (displayConfigs.length == 0)) {
-                    throw new RuntimeException("CFSurface: could not determine screen dimensions (SurfaceControl)");
+                    if (fallbackWidth > 0 && fallbackHeight > 0) {
+                        mWidth = fallbackWidth;
+                        mHeight = fallbackHeight;
+                    } else {
+                        throw new RuntimeException("CFSurface: could not determine screen dimensions (SurfaceControl)");
+                    }
+                } else {
+                    mWidth = fWidth.getInt(displayConfigs[0]);
+                    mHeight = fHeight.getInt(displayConfigs[0]);
                 }
-                mWidth = fWidth.getInt(displayConfigs[0]);
-                mHeight = fHeight.getInt(displayConfigs[0]);
                 checkRotation();
             }
 
